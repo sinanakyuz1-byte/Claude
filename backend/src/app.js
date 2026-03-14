@@ -14,7 +14,27 @@ app.use(cors());
 app.use(express.json());
 
 // Health check
-app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
+app.get('/health', (req, res) => {
+  const cache = require('./cache');
+  const outages = cache.get('outages') || [];
+  const scraperStats = scheduler.getScraperStats();
+
+  const openCircuits = scraperStats.filter((s) => s.circuitOpen);
+  const status = openCircuits.length > scraperStats.length / 2 ? 'degraded' : 'ok';
+
+  res.json({
+    status,
+    time: new Date().toISOString(),
+    lastUpdated: cache.get('lastUpdated') || null,
+    cachedOutages: outages.length,
+    scrapers: {
+      total: scraperStats.length,
+      healthy: scraperStats.filter((s) => !s.circuitOpen).length,
+      circuitOpen: openCircuits.length,
+      details: scraperStats,
+    },
+  });
+});
 
 // Routes
 app.use('/api/outages', outagesRouter);

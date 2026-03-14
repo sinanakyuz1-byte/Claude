@@ -1,6 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 
 const DEFAULT_HEADERS = {
   'User-Agent':
@@ -73,16 +73,32 @@ function normalizeText(str) {
   return (str || '').trim().replace(/\s+/g, ' ');
 }
 
+/**
+ * Generate a stable, deterministic outage ID.
+ * Same outage scraped across multiple cycles produces the same ID,
+ * preventing duplicate push notifications.
+ */
+function stableOutageId({ provider, province, districts, startTime }) {
+  const raw = [
+    provider,
+    province,
+    (districts || []).slice().sort().join(','),
+    startTime || '',
+  ].join('|');
+  return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 24);
+}
+
 function makeOutage({ type, status, provider, province, districts, neighborhoods, startTime, endTime, description }) {
+  const parsedStart = parseDate(startTime) || new Date().toISOString();
   return {
-    id: uuidv4(),
+    id: stableOutageId({ provider, province, districts, startTime: parsedStart }),
     type,
     status: status || 'planned',
     provider,
     province,
     districts: districts || [],
     neighborhoods: neighborhoods || [],
-    startTime: parseDate(startTime) || new Date().toISOString(),
+    startTime: parsedStart,
     endTime: endTime ? parseDate(endTime) : null,
     description: description || null,
     scrapedAt: new Date().toISOString(),
